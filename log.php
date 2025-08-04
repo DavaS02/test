@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once "db.php"; // include DB connection
+require_once "db.php";
 
 if (isset($_GET['reset'])) {
     session_destroy();
@@ -8,10 +8,9 @@ if (isset($_GET['reset'])) {
     exit;
 }
 
-if (!isset($_SESSION["attempts"])) $_SESSION["attempts"] = 0;
-if (!isset($_SESSION["lockout_time"])) $_SESSION["lockout_time"] = 0;
-
 $now = time();
+$_SESSION["attempts"] = $_SESSION["attempts"] ?? 0;
+$_SESSION["lockout_time"] = $_SESSION["lockout_time"] ?? 0;
 
 if ($_SESSION["lockout_time"] > $now) {
     $remaining = $_SESSION["lockout_time"] - $now;
@@ -20,33 +19,45 @@ if ($_SESSION["lockout_time"] > $now) {
     exit;
 }
 
+// Track login status
+$login_success = false;
+
+if($login_success){
+        header("Location: launch.php");
+        exit;
+
+}
+
+// Handle login
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $username = $_POST["username"] ?? '';
     $password = $_POST["password"] ?? '';
 
-    // Prepare and check user from DB
-    $stmt = $conn->prepare("SELECT password FROM users WHERE username = ?");
+    $stmt = $conn->prepare("SELECT id, password FROM users WHERE username = ?");
     $stmt->bind_param("s", $username);
     $stmt->execute();
     $stmt->store_result();
 
     if ($stmt->num_rows === 1) {
-        $stmt->bind_result($db_password);
+        $stmt->bind_result($user_id, $db_password);
         $stmt->fetch();
 
-        if ($password === $db_password) { // plain text for now
-            echo "✅ Login successful.<br>";
+        if (password_verify($password, $db_password)) {
+            $_SESSION["user_id"] = $user_id;
+            $_SESSION["username"] = $username;
             $_SESSION["attempts"] = 0;
             $_SESSION["lockout_time"] = 0;
+
+            $login_success = true; // mark login success
+
+
+
         } else {
-            // handle lockout
             $_SESSION["attempts"]++;
-            $delays = [3 => 30, 4 => 60, 5 => 300, 6 => 1800];
-            $delay = $delays[$_SESSION["attempts"]] ?? $delays[6];
+            $delay = [3 => 30, 4 => 60, 5 => 300, 6 => 1800][$_SESSION["attempts"]] ?? 1800;
             if ($_SESSION["attempts"] >= 3) {
                 $_SESSION["lockout_time"] = $now + $delay;
-                echo "❌ Wrong password. Locked for $delay seconds.<br>";
-                echo "<a href='?reset'>🔁 Reset session</a>";
+                echo "❌ Wrong password. Locked for $delay seconds.<br><a href='?reset'>🔁 Reset session</a>";
                 exit;
             } else {
                 echo "❌ Wrong password.<br>";
@@ -55,15 +66,30 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     } else {
         echo "❌ User not found.<br>";
     }
+
     $stmt->close();
 }
 ?>
 
-<form method="POST">
-    Username: <input type="text" name="username"><br>
-    Password: <input type="password" name="password"><br>
+<!-- HTML -->
+<form method="POST" id="loginForm">
+    Username: <input type="text" name="username" required><br>
+    Password: <input type="password" name="password" required><br>
     <input type="submit" value="Login">
 </form>
-<br>
+
 <a href="?reset">🔁 Reset session</a>
-<?php echo "<br>(Attempts: {$_SESSION["attempts"]})"; ?>
+<?php echo "<br>(Attempts: {$_SESSION['attempts']})"; ?>
+
+<?php if ($login_success): ?>
+<script>
+    // ✅ THIS WILL WORK IN ALL BROWSERS!
+    const newTab = window.open('launch.php', '_blank');
+    if (!newTab) {
+        alert('⚠️ Please allow pop-ups!');
+    } else {
+        // Optional: redirect current tab somewhere
+        window.location.href = 'welcome.php'; // or leave it
+    }
+</script>
+<?php endif; ?>
