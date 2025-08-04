@@ -1,24 +1,26 @@
 <?php
 require_once "db.php";
 
-    if ($_SERVER["REQUEST_METHOD"]=== "POST"){
-        $username=$_POST ["username"]?? '';
-        $password= password_hash($_POST ["password"]?? '', PASSWORD_DEFAULT);
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $username = $_POST["username"] ?? '';
+    $password = $_POST["password"] ?? '';
 
-        $stmt = $conn->prepare("INSERT INTO users(username, password)VALUES (?,?)");
-        $stmt->bind_param("ss",$username, $password);
-        if ($stmt->execute()){
-            header("Location: dashboard.php");
-            exit;
-        } else{
-            echo "⚠️ Error: Username might already exist.";
-        }
+    // ✅ This hashes the password
+    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
+    $stmt = $conn->prepare("INSERT INTO users (username, password) VALUES (?, ?)");
+    $stmt->bind_param("ss", $username, $hashedPassword);
+
+    if ($stmt->execute()) {
+        echo "✅ User created successfully.";
+    } else {
+        echo "❌ Error: " . $stmt->error;
     }
+}
 ?>
-<h2>Create User</h2>
+
 <form method="POST">
-  Username: <input type="text" name="username"><br>
-  Password: <input type="password" name="password"><br>
-  <button type="submit">Create</button>
+    Username: <input type="text" name="username"><br>
+    Password: <input type="password" name="password"><br>
+    <input type="submit" value="Create User">
 </form>
