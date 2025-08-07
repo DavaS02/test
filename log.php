@@ -12,84 +12,77 @@ $now = time();
 $_SESSION["attempts"] = $_SESSION["attempts"] ?? 0;
 $_SESSION["lockout_time"] = $_SESSION["lockout_time"] ?? 0;
 
+ob_start();
+
+echo '<div class="login-box">';
+
 if ($_SESSION["lockout_time"] > $now) {
     $remaining = $_SESSION["lockout_time"] - $now;
-    echo "⛔ Blocked: Try again in $remaining seconds.<br>";
-    echo "<a href='?reset'>🔁 Reset session</a><br>";
-    exit;
-}
+    echo "<div class='message'>⛔ Blocked: Try again in $remaining seconds.</div>";
+    echo "<a class='reset-link' href='?reset'>🔁 Reset session</a>";
+} else {
+    $login_success = false;
 
-// Track login status
-$login_success = false;
+    if ($_SERVER["REQUEST_METHOD"] === "POST") {
+        $username = $_POST["username"] ?? '';
+        $password = $_POST["password"] ?? '';
 
-if($login_success){
-        header("Location: launch.php");
-        exit;
+        $stmt = $conn->prepare("SELECT id, password FROM users WHERE username = ?");
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+        $stmt->store_result();
 
-}
+        if ($stmt->num_rows === 1) {
+            $stmt->bind_result($user_id, $db_password);
+            $stmt->fetch();
 
-// Handle login
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $username = $_POST["username"] ?? '';
-    $password = $_POST["password"] ?? '';
+            if (password_verify($password, $db_password)) {
+                $_SESSION["user_id"] = $user_id;
+                $_SESSION["username"] = $username;
+                $_SESSION["attempts"] = 0;
+                $_SESSION["lockout_time"] = 0;
 
-    $stmt = $conn->prepare("SELECT id, password FROM users WHERE username = ?");
-    $stmt->bind_param("s", $username);
-    $stmt->execute();
-    $stmt->store_result();
-
-    if ($stmt->num_rows === 1) {
-        $stmt->bind_result($user_id, $db_password);
-        $stmt->fetch();
-
-        if (password_verify($password, $db_password)) {
-            $_SESSION["user_id"] = $user_id;
-            $_SESSION["username"] = $username;
-            $_SESSION["attempts"] = 0;
-            $_SESSION["lockout_time"] = 0;
-
-            $login_success = true; // mark login success
-
-
-
-        } else {
-            $_SESSION["attempts"]++;
-            $delay = [3 => 30, 4 => 60, 5 => 300, 6 => 1800][$_SESSION["attempts"]] ?? 1800;
-            if ($_SESSION["attempts"] >= 3) {
-                $_SESSION["lockout_time"] = $now + $delay;
-                echo "❌ Wrong password. Locked for $delay seconds.<br><a href='?reset'>🔁 Reset session</a>";
+                header("Location: welcome.php");
                 exit;
             } else {
-                echo "❌ Wrong password.<br>";
+                $_SESSION["attempts"]++;
+                $delay = [3 => 30, 4 => 60, 5 => 300, 6 => 1800][$_SESSION["attempts"]] ?? 1800;
+                if ($_SESSION["attempts"] >= 3) {
+                    $_SESSION["lockout_time"] = $now + $delay;
+                    echo "<div class='message'>❌ Wrong password. Locked for $delay seconds.</div>";
+                    echo "<a class='reset-link' href='?reset'>🔁 Reset session</a>";
+                } else {
+                    echo "<div class='message'>❌ Wrong password.</div>";
+                }
             }
+        } else {
+            echo "<div class='message'>❌ User not found.</div>";
         }
-    } else {
-        echo "❌ User not found.<br>";
+
+        $stmt->close();
     }
 
-    $stmt->close();
+    if (!isset($_SESSION["user_id"])) {
+        echo "<h2>🔐 Login</h2>";
+        ?>
+        <form method="POST" id="loginForm">
+            <label>Username:</label>
+            <input type="text" name="username" required>
+
+            <label>Password:</label>
+            <input type="password" name="password" required>
+
+            <input type="submit" value="Login">
+        </form>
+        <a class="reset-link" href="?reset">🔁 Reset session</a>
+        <?php
+        echo "<br>(Attempts: {$_SESSION['attempts']})";
+    }
 }
+
+echo '</div>'; // end of .login-box
+
+$content = ob_get_clean();
+include 'layout.php';
 ?>
 
-<!-- HTML -->
-<form method="POST" id="loginForm">
-    Username: <input type="text" name="username" required><br>
-    Password: <input type="password" name="password" required><br>
-    <input type="submit" value="Login">
-</form>
-
-<a href="?reset">🔁 Reset session</a>
-<?php echo "<br>(Attempts: {$_SESSION['attempts']})"; ?>
-
-<?php if ($login_success): ?>
-<script>
-    // ✅ THIS WILL WORK IN ALL BROWSERS!
-    const newTab = window.open('launch.php', '_blank');
-    if (!newTab) {
-        alert('⚠️ Please allow pop-ups!');
-    } else {
-        // Optional: redirect current tab somewhere
-        window.location.href = 'welcome.php'; // or leave it
-    }
-</script>
-<?php endif; ?>

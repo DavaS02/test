@@ -11,6 +11,8 @@ require_once "db.php";
 $result = $conn->query("SELECT * FROM users");
 ?>
 
+
+
 <h2>Welcome, <?= htmlspecialchars($_SESSION["username"]) ?>! 👋</h2>
 <a href="logout.php">🚪 Logout</a>
 <h2>User List</h2>
